@@ -7,16 +7,17 @@ from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
 
 # -----------------------------
-# Google Sheets 인증
-# -----------------------------
+# Google Sheets 인증 (Secrets 사용)
+#-------------
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 
-# credentials.json 대신 Streamlit Secrets 사용 권장
-creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+# Streamlit Secrets에서 인증 정보 가져오기
+creds = ServiceAccountCredentials.from_json_keyfile_dict(st.secrets["gcp_service_account"], scope)
 client = gspread.authorize(creds)
 
 # 시트 열기
 sheet = client.open("2025 Quality Event").sheet1
+
 
 # 문제 은행 (20문항)
 allQuestions = [
@@ -104,7 +105,7 @@ st.set_page_config(layout="wide")
 st.markdown('<div class="main-title">2025 전사 품질 퀴즈 이벤트</div>', unsafe_allow_html=True)
 
 # -----------------------------
-# 사용자 정보 입력
+# 사용자 입력
 # -----------------------------
 col1, col2, col3 = st.columns([2, 2, 1])
 with col1:
@@ -189,4 +190,3 @@ if not results_df.empty:
     st.dataframe(results_df.style.set_properties(**{'background-color': '#e6f2ff'}))
 else:
     st.write("아직 결과가 없습니다.")
-st.markdown('</div>', unsafe_allow_html=True)
