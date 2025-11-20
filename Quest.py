@@ -1,17 +1,23 @@
+
 import streamlit as st
 import pandas as pd
 import random
 import time
-from office365.sharepoint.client_context import ClientContext
-from office365.runtime.auth.user_credential import UserCredential
+import gspread
+from oauth2client.service_account import ServiceAccountCredentials
+from datetime import datetime
 
-# SharePoint 연결 설정
-sharepoint_site = "https://mdigital.sharepoint.com/sites/GO/Pyeongtaek1"
-excel_path = "/sites/GO/Pyeongtaek1/Plant Data/Quality/Event/2025 Quality Event/2025 List.xlsx"
-username = "YOUR_EMAIL@domain.com"
-password = "YOUR_PASSWORD"
+# -----------------------------
+# Google Sheets 인증
+# -----------------------------
+scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
+# 로컬 실행 시 credentials.json 사용
+creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
+client = gspread.authorize(creds)
 
-ctx = ClientContext(sharepoint_site).with_credentials(UserCredential(username, password))
+# 시트 열기
+sheet = client.open("2025 Quality Event").sheet1
+
 
 # 문제 은행 (20문항)
 allQuestions = [
@@ -136,15 +142,49 @@ if "questions" in st.session_state:
         elapsed = round(end_time - st.session_state["start_time"], 2)
         st.success(f"게임 종료! ✅ 정답 수: {st.session_state['score']} / ⏱ 소요시간: {elapsed}초")
 
-        # 결과 저장
-        df = pd.DataFrame([[name, dept, st.session_state["score"], elapsed]],
-                          columns=["이름", "소속", "정답 수", "소요시간"])
-        file = ctx.web.get_file_by_server_relative_url(excel_path)
-        file.download("temp.xlsx").execute_query()
-        existing_df = pd.read_excel("temp.xlsx")
-        updated_df = pd.concat([existing_df, df], ignore_index=True)
-        updated_df.to_excel("temp.xlsx", index=False)
-        file.upload("temp.xlsx").execute_query()
+     
+# 결과 저장
+if st.button("결과 저장"):
+    elapsed_time = round(time.time() - start_time, 2)
+    name = st.text_input("이름 입력")
+    dept = st.text_input("부서 입력")
+    if name and dept:
+        sheet.append_row([name, dept, score, elapsed_time])
+
+# -----------------------------
+# Streamlit UI
+# -----------------------------
+st.title("2025 Quality Event Quiz")
+st.write("Google Sheets 연동 버전")
+
+# 사용자 정보 입력
+name = st.text_input("이름")
+dept = st.text_input("부서")
+emp_id = st.text_input("사번")
+event_name = "2025 Quality Event"
+
+if st.button("퀴즈 시작"):
+    if not name or not dept or not emp_id:
+        st.error("이름, 부서, 사번을 입력하세요.")
+    else:
+        selected_questions = random.sample(allQuestions, 8)
+        score = 0
+        start_time = time.time()
+
+        for i, q in enumerate(selected_questions):
+            st.subheader(f"Q{i+1}: {q['q']}")
+            answer = st.radio("선택하세요:", q["c"], key=f"q{i}")
+            if st.button(f"제출 {i+1}", key=f"submit{i}"):
+                if answer == q["a"]:
+                    score += 1
+                st.write(f"정답: {q['a']}")
+
+        if st.button("결과 저장"):
+            elapsed_time = round(time.time() - start_time, 2)
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            sheet.append_row([event_name, name, dept, emp_id, score, elapsed_time, timestamp])
+            st.success("결과가 Google Sheets에 저장되었습니다!")
+
 
 # 실시간 결과 표시 (순위 추가)
 st.markdown('<div class="card">', unsafe_allow_html=True)
@@ -157,3 +197,4 @@ results_df = pd.read_excel("temp.xlsx")
 results_df = results_df.sort_values(by=["정답 수", "소요시간"], ascending=[False, True]).reset_index(drop=True)
 results_df["순위"] = results_df.index + 1
 st.dataframe(results_df.style.set_properties(**{'background-color': '#e6f2ff'}))
+
