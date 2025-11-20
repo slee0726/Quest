@@ -190,3 +190,4 @@ if not results_df.empty:
     st.dataframe(results_df.style.set_properties(**{'background-color': '#e6f2ff'}))
 else:
     st.write("아직 결과가 없습니다.")
+st.markdown('</div>', unsafe_allow_html=True)
