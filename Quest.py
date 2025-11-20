@@ -1,4 +1,3 @@
-
 import streamlit as st
 import pandas as pd
 import random
@@ -11,13 +10,13 @@ from datetime import datetime
 # Google Sheets 인증
 # -----------------------------
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-# 로컬 실행 시 credentials.json 사용
+
+# credentials.json 대신 Streamlit Secrets 사용 권장
 creds = ServiceAccountCredentials.from_json_keyfile_name("credentials.json", scope)
 client = gspread.authorize(creds)
 
 # 시트 열기
 sheet = client.open("2025 Quality Event").sheet1
-
 
 # 문제 은행 (20문항)
 allQuestions = [
@@ -83,29 +82,38 @@ allQuestions = [
      "a":"Cost of Poor Quality (품질 불량으로 인한 비용)"}
 ]
 
+
+# -----------------------------
 # CSS 스타일
+# -----------------------------
 st.markdown("""
     <style>
     body {background-color: #f9f9f9;}
     .main-title {color: #004080; font-size: 36px; font-weight: bold; text-align: center;}
     .card {background: white; padding: 20px; border-radius: 10px; box-shadow: 0 4px 8px rgba(0,0,0,0.1);}
     .timer {font-size: 24px; color: #ff6600; font-weight: bold;}
-    .stButton>button {background-color: #004080; color: white; font-size: 18px; border-radius: 8px;}
-    .stButton>button:hover {background-color: #0066cc;}
+    .stButton button {background-color: #004080; color: white; font-size: 18px; border-radius: 8px;}
+    .stButton button:hover {background-color: #0066cc;}
     </style>
 """, unsafe_allow_html=True)
 
+# -----------------------------
 # 페이지 설정
+# -----------------------------
 st.set_page_config(layout="wide")
 st.markdown('<div class="main-title">2025 전사 품질 퀴즈 이벤트</div>', unsafe_allow_html=True)
 
-# 상단 입력 영역
+# -----------------------------
+# 사용자 정보 입력
+# -----------------------------
 col1, col2, col3 = st.columns([2, 2, 1])
 with col1:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     name = st.text_input("이름 입력")
-    dept = st.text_input("소속 입력")
+    dept = st.text_input("부서 입력")
+    emp_id = st.text_input("사번 입력")
     st.markdown('</div>', unsafe_allow_html=True)
+
 with col2:
     st.markdown('<div class="card">', unsafe_allow_html=True)
     if "start_time" in st.session_state:
@@ -114,17 +122,28 @@ with col2:
     else:
         st.markdown('<div class="timer">⏱ 준비 중</div>', unsafe_allow_html=True)
     st.markdown('</div>', unsafe_allow_html=True)
+
 with col3:
-    st.image("logo.png", width=120)  # MERCK 로고 추가
+    st.image("logo.png", width=120)
 
+# -----------------------------
 # 게임 시작
+# -----------------------------
 if st.button("게임 시작"):
-    st.session_state["start_time"] = time.time()
-    st.session_state["questions"] = random.sample(allQuestions, 8)
-    st.session_state["score"] = 0
-    st.session_state["current_q"] = 0
+    if not name or not dept or not emp_id:
+        st.error("이름, 부서, 사번을 입력하세요.")
+    else:
+        st.session_state["start_time"] = time.time()
+        st.session_state["questions"] = random.sample(allQuestions, min(8, len(allQuestions)))
+        st.session_state["score"] = 0
+        st.session_state["current_q"] = 0
+        st.session_state["name"] = name
+        st.session_state["dept"] = dept
+        st.session_state["emp_id"] = emp_id
 
+# -----------------------------
 # 퀴즈 진행
+# -----------------------------
 if "questions" in st.session_state:
     q_index = st.session_state["current_q"]
     if q_index < len(st.session_state["questions"]):
@@ -142,59 +161,32 @@ if "questions" in st.session_state:
         elapsed = round(end_time - st.session_state["start_time"], 2)
         st.success(f"게임 종료! ✅ 정답 수: {st.session_state['score']} / ⏱ 소요시간: {elapsed}초")
 
-     
-# 결과 저장
-if st.button("결과 저장"):
-    elapsed_time = round(time.time() - start_time, 2)
-    name = st.text_input("이름 입력")
-    dept = st.text_input("부서 입력")
-    if name and dept:
-        sheet.append_row([name, dept, score, elapsed_time])
-
-# -----------------------------
-# Streamlit UI
-# -----------------------------
-st.title("2025 Quality Event Quiz")
-st.write("Google Sheets 연동 버전")
-
-# 사용자 정보 입력
-name = st.text_input("이름")
-dept = st.text_input("부서")
-emp_id = st.text_input("사번")
-event_name = "2025 Quality Event"
-
-if st.button("퀴즈 시작"):
-    if not name or not dept or not emp_id:
-        st.error("이름, 부서, 사번을 입력하세요.")
-    else:
-        selected_questions = random.sample(allQuestions, 8)
-        score = 0
-        start_time = time.time()
-
-        for i, q in enumerate(selected_questions):
-            st.subheader(f"Q{i+1}: {q['q']}")
-            answer = st.radio("선택하세요:", q["c"], key=f"q{i}")
-            if st.button(f"제출 {i+1}", key=f"submit{i}"):
-                if answer == q["a"]:
-                    score += 1
-                st.write(f"정답: {q['a']}")
-
+        # 결과 저장
         if st.button("결과 저장"):
-            elapsed_time = round(time.time() - start_time, 2)
             timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            sheet.append_row([event_name, name, dept, emp_id, score, elapsed_time, timestamp])
+            sheet.append_row([
+                "2025 Quality Event",
+                st.session_state["name"],
+                st.session_state["dept"],
+                st.session_state["emp_id"],
+                st.session_state["score"],
+                elapsed,
+                timestamp
+            ])
             st.success("결과가 Google Sheets에 저장되었습니다!")
 
-
-# 실시간 결과 표시 (순위 추가)
+# -----------------------------
+# 실시간 결과 표시
+# -----------------------------
 st.markdown('<div class="card">', unsafe_allow_html=True)
 st.subheader("📊 실시간 결과 (순위 포함)")
-file = ctx.web.get_file_by_server_relative_url(excel_path)
-file.download("temp.xlsx").execute_query()
-results_df = pd.read_excel("temp.xlsx")
+results = sheet.get_all_records()
+results_df = pd.DataFrame(results)
 
-# 순위 계산: 정답 수 → 소요시간 기준
-results_df = results_df.sort_values(by=["정답 수", "소요시간"], ascending=[False, True]).reset_index(drop=True)
-results_df["순위"] = results_df.index + 1
-st.dataframe(results_df.style.set_properties(**{'background-color': '#e6f2ff'}))
-
+if not results_df.empty:
+    results_df = results_df.sort_values(by=["정답 수", "소요시간"], ascending=[False, True]).reset_index(drop=True)
+    results_df["순위"] = results_df.index + 1
+    st.dataframe(results_df.style.set_properties(**{'background-color': '#e6f2ff'}))
+else:
+    st.write("아직 결과가 없습니다.")
+st.markdown('</div>', unsafe_allow_html=True)
